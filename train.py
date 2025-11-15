@@ -1,21 +1,39 @@
-import face_recognition
+import cv2
 import os
-import pickle
 
-# Pasta com imagens conhecidas
-path = "imagens"
-known_faces = []
-known_names = []
+# Pasta para guardar os dados de treino
+dataset_dir = "dataset"
+if not os.path.exists(dataset_dir):
+    os.makedirs(dataset_dir)
 
-for file_name in os.listdir(path):
-    if file_name.endswith(".jpg") or file_name.endswith(".png"):
-        image = face_recognition.load_image_file(os.path.join(path, file_name))
-        encoding = face_recognition.face_encodings(image)[0]
-        known_faces.append(encoding)
-        known_names.append(os.path.splitext(file_name)[0])
+name = input("Qual é o nome da pessoa? ")
+person_dir = os.path.join(dataset_dir, name)
+if not os.path.exists(person_dir):
+    os.makedirs(person_dir)
 
-# Guarda os dados treinados num ficheiro
-with open("modelo_faces.pkl", "wb") as f:
-    pickle.dump((known_faces, known_names), f)
+cap = cv2.VideoCapture(0)
+count = 0
+total_photos = 500
 
-print("✅ Treino concluído e modelo guardado!")
+print(f"Começando a captura de {total_photos} fotos para {name}...")
+
+while count < total_photos:
+    ret, frame = cap.read()
+    if not ret:
+        continue
+    
+    # Mostra a imagem
+    cv2.imshow("Captura de rosto", frame)
+    
+    # Salva a imagem
+    img_path = os.path.join(person_dir, f"{count}.jpg")
+    cv2.imwrite(img_path, frame)
+    count += 1
+    
+    # Sai se pressionar 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+print("Captura concluída!")
+cap.release()
+cv2.destroyAllWindows()
