@@ -1,58 +1,78 @@
-import cv2
 import pygame
-import face_recognition
-import pickle
+import cv2
+import os
+from deepface import DeepFace
 import numpy as np
 
-# Carregar modelo treinado
-with open("modelo_faces.pkl", "rb") as f:
-    known_faces, known_names = pickle.load(f)
-
-# Inicializa pygame e camera
+# Inicializar Pygame
 pygame.init()
-screen = pygame.display.set_mode((640, 480))
-pygame.display.set_caption("Verificação Facial")
+WIDTH, HEIGHT = 800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Face Recognition Game")
+clock = pygame.time.Clock()
 
-camera = cv2.VideoCapture(0)
-font = pygame.font.SysFont("Arial", 32)
+# Inicializar a webcam
+cap = cv2.VideoCapture(0)
 
+# Carregar embeddings de treino
+dataset_dir = "dataset"
+known_embeddings = []
+known_names = []
+
+print("🔄 Gerando embeddings das imagens de treino...")
+for person in os.listdir(dataset_dir):
+    person_dir = os.path.join(dataset_dir, person)
+    if not os.path.isdir(person_dir):
+        continue
+    for img_file in os.listdir(person_dir):
+        img_path = os.path.join(person_dir, img_file)
+        embedding = DeepFace.represent(img_path, model_name="Facenet")[0]["embedding"]
+        known_embeddings.append(embedding)
+        known_names.append(person)
+
+def euclidean_distance(a, b):
+    return np.linalg.norm(np.array(a) - np.array(b))
+
+# Loop principal do Pygame
 running = True
-status_text = "Pressione ESPAÇO para verificar"
+font = pygame.font.SysFont(None, 48)
 
 while running:
-    ret, frame = camera.read()
+    ret, frame = cap.read()
     if not ret:
-        break
-
-    # Converte imagem para exibir no pygame
+        continue
+    
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    frame_surface = pygame.surfarray.make_surface(np.rot90(frame_rgb))
+    
+    try:
+        # Reconhecimento facial
+        result = DeepFace.find(frame_rgb, db_path=dataset_dir, enforce_detection=False, model_name="Facenet")
+        if len(result) > 0:
+            detected_name = result[0]['identity'][0].split(os.sep)[-2]
+        else:
+            detected_name = "Desconhecido"
+    except:
+        detected_name = "Desconhecido"
 
-    # Mostra imagem e texto
-    screen.blit(frame_surface, (0, 0))
-    text_surface = font.render(status_text, True, (255, 255, 255))
-    screen.blit(text_surface, (10, 10))
-    pygame.display.flip()
-
+    # Converte para Pygame
+    frame_rgb = cv2.resize(frame_rgb, (WIDTH, HEIGHT))
+    frame_surface = pygame.surfarray.make_surface(frame_rgb).convert()
+    frame_surface = pygame.transform.rotate(frame_surface, -90)
+    frame_surface = pygame.transform.flip(frame_surface, True, False)
+    
+    # Mostrar na tela
+    screen.blit(frame_surface, (0,0))
+    
+    # Mostrar nome da pessoa
+    text = font.render(detected_name, True, (255,0,0))
+    screen.blit(text, (50,50))
+    
+    pygame.display.update()
+    clock.tick(30)
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:  # Verificar rosto
-                rgb_small = cv2.resize(frame_rgb, (0, 0), fx=0.25, fy=0.25)
-                encodings = face_recognition.face_encodings(rgb_small)
 
-                if encodings:
-                    match_results = face_recognition.compare_faces(known_faces, encodings[0])
-                    name = "DESCONHECIDO"
-
-                    if True in match_results:
-                        name = known_names[match_results.index(True)]
-                        status_text = f"Acesso PERMITIDO: {name}"
-                    else:
-                        status_text = "Acesso NEGADO!"
-                else:
-                    status_text = "Nenhum rosto detetado."
-
-camera.release()
+cap.release()
 pygame.quit()
